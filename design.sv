@@ -316,16 +316,10 @@ module Datapath (
 		PC_target
 	);
 	
-	// MuxNto1 #(32, 2) PCmux (
-	// 	.in({PC_target, PC_plus4}),
-	// 	.sel(TEST_source),
-	// 	.out(PC_next)
-	// );
-
-	Mux2to1 #(32) PCMux (
-		PC_plus4, PC_target,
-		PC_source,
-		PC_next
+	MuxNto1 #(32, 2) PCmux (
+		.in({PC_target, PC_plus4}),
+		.sel(PC_source),
+		.out(PC_next)
 	);
 
 	// register file logic
@@ -344,10 +338,10 @@ module Datapath (
 	);
 
 	// ALU logic
-	Mux2to1 #(32) sourceBMux (
-		write_data, immediate_extended,
-		ALU_source,
-		source_B
+	MuxNto1 #(32, 2) sourceBMux (
+		.in({immediate_extended, write_data}),
+		.sel(ALU_source),
+		.out(source_B)
 	);
 
 	ALU alu (
@@ -384,16 +378,6 @@ module Adder (
 		output logic [31:0] sum
 );
 	assign sum = a + b;
-endmodule
-
-module Mux2to1 #(
-		parameter WIDTH = 8
-) (
-		input  logic [WIDTH-1:0] in0, in1,
-		input  logic             sel,
-		output logic [WIDTH-1:0] out
-);
-	assign out = sel ? in1 : in0;
 endmodule
 
 module MuxNto1 #(
