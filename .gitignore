@@ -1,5 +1,5 @@
-# ignore files without extensions
-*.
+# ignore .out files
+*.out
 
 # ignore .vcd files
 *.vcd
