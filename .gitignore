@@ -1,8 +1,11 @@
-# Ignore files without extensions
+# ignore files without extensions
 *.
 
-# Ignore .vcd files
+# ignore .vcd files
 *.vcd
 
-# Ignore all files inside the dump directory
+# ignore .gtkwd files
+*.gtkw
+
+# ignore all files inside the dump directory
 dump/*

@@ -281,10 +281,10 @@ module Datapath (
 	input logic clk, reset,
 	PC_source,
 	ALU_source,
-	RegWrite,
-	input logic [ 1:0] result_source,
+	write_to_register,
+	input logic [1:0] result_source,
 	immediate_source,
-	input logic [ 2:0] ALU_control,
+	input logic [2:0] ALU_control,
 	input logic [31:0] instruction,
 	data_read,
 	output logic zero,
@@ -298,85 +298,70 @@ module Datapath (
 	logic [31:0] result;
 
 	// next program counter logic
-	FlipFlopR #(32) PCregister (
+	FlipFlopR #(32) PCRegister (
 		clk, reset,
 		PC_next,
 		PC
 	);
 
-	Adder PC_plus4_adder  (
+	Adder PCplus4Adder  (
 		PC,
 		32'd4,
 		PC_plus4
 	);
 
-	Adder PC_branch_adder (
+	Adder PCbranchAdder (
 		PC,
 		immediate_extended,
 		PC_target
 	);
 	
-	Mux2to1 #(32) PCmux (
+	// MuxNto1 #(32, 2) PCmux (
+	// 	.in({PC_target, PC_plus4}),
+	// 	.sel(TEST_source),
+	// 	.out(PC_next)
+	// );
+
+	Mux2to1 #(32) PCMux (
 		PC_plus4, PC_target,
 		PC_source,
 		PC_next
 	);
 
-	logic TEST_source;
-	logic [31:0] TEST_output;
-
-	initial begin
-		TEST_source <= 0;
-	        forever #5 TEST_source = ~TEST_source;
-	end
-
-	MuxNto1 #(32, 2) PCmux2 (
-		.in({PC_target, PC_plus4}),
-		.sel(TEST_source),
-		.out(TEST_output)
+	// register file logic
+	RegisterFile registerFile (
+		clk,
+		write_to_register,
+		instruction[19:15], instruction[24:20],	instruction[11:7],		// rs1|rs2|rd
+		result,
+		source_A, write_data
 	);
 
-	/*
-	// // register file logic
-	// regfile rf (
-	// 		clk,
-	// 		RegWrite,
-	// 		Instr[19:15],
-	// 		Instr[24:20],
-	// 		Instr[11:7],
-	// 		Result,
-	// 		SrcA,
-	// 		WriteData
-	// );
-
-	// extend ext (
-	// 		Instr[31:7],
-	// 		ImmSrc,
-	// 		ImmExt
-	// );
-	*/
+	Extender extender (
+		immediate_source,
+		instruction[31:7],
+		immediate_extended
+	);
 
 	// ALU logic
-	// mux2 #(32) srcbmux (
-	// 		WriteData,
-	// 		ImmExt,
-	// 		ALUSrc,
-	// 		SrcB
-	// );
-	// alu alu (
-	// 		SrcA,
-	// 		SrcB,
-	// 		ALUControl,
-	// 		ALUResult,
-	// 		Zero
-	// );
-	// mux3 #(32) resultmux (
-	// 		ALUResult,
-	// 		ReadData,
-	// 		32'b0,
-	// 		ResultSrc,
-	// 		Result
-	// );
+	Mux2to1 #(32) sourceBMux (
+		write_data, immediate_extended,
+		ALU_source,
+		source_B
+	);
+
+	ALU alu (
+		ALU_control,
+		source_A, source_B,
+		zero,
+		ALU_result
+	);
+
+	MuxNto1 #(32, 3) resultMux (
+		.in({32'b0, data_read, ALU_result}),
+		.sel(result_source),
+		.out(result)
+	);
 endmodule
 
 module FlipFlopR #(
@@ -411,16 +396,6 @@ module Mux2to1 #(
 	assign out = sel ? in1 : in0;
 endmodule
 
-module Mux3to1 #(
-		parameter WIDTH = 8
-) (
-		input  logic [WIDTH-1:0] in0, in1, in2,
-		input  logic [      1:0] sel,
-		output logic [WIDTH-1:0] out
-);
-	assign out = sel[1] ? in2 : (sel[0] ? in1 : in0);
-endmodule
-
 module MuxNto1 #(
 	parameter WIDTH = 32,
 	parameter N     = 4
@@ -430,92 +405,108 @@ module MuxNto1 #(
     output logic [WIDTH-1:0] out
 );
     always_comb begin
-        out = in[sel];
+	out = (sel < N) ? in[sel] : 'x;
     end
 endmodule
 
-// module regfile (
-// 		input  logic        clk,
-// 		input  logic        we3,
-// 		input  logic [ 4:0] a1,
-// 		a2,
-// 		a3,
-// 		input  logic [31:0] wd3,
-// 		output logic [31:0] rd1,
-// 		rd2
-// );
-// 	logic [31:0] rf[31:0];  // 32 registers, each 32 bits wide
+module RegisterFile (
+		input logic clk,
+		input logic write_enabled,
+		input logic [4:0] register_rource1, register_rource2, destination_register, // rs1/rs2/rd
+		input logic [31:0] data_to_write,
+		output logic [31:0] data_read1, data_read2
+);
+	logic [31:0] register_file[31:0];  // 32 registers, each 32 bits wide
 
-// 	// Three-ported register file:
-// 	// - Two ports for combinational reads (A1/RD1, A2/RD2)
-// 	// - One port for clocked writes (A3/WD3/WE3)
-// 	// - Register 0 is hardwired to 0
+	// Three-ported register file:
+	// - Two ports for combinational reads (A1/RD1, A2/RD2)
+	// - One port for clocked writes (A3/WD3/WE3)
+	// - Register 0 is hardwired to 0
 
-// 	always_ff @(posedge clk) begin
-// 		if (we3) rf[a3] <= wd3;
-// 	end
+	always_ff @(posedge clk) begin
+		if (write_enabled) register_file[destination_register] <= data_to_write;
+	end
 
-// 	assign rd1 = (a1 != 0) ? rf[a1] : 0;  // Return 0 if accessing register 0
-// 	assign rd2 = (a2 != 0) ? rf[a2] : 0;  // Return 0 if accessing register 0
-// endmodule
+	assign data_read1 = (register_rource1 != 0) ? register_file[register_rource1] : '0;	// returns 0 if accessing register 0
+	assign data_read2 = (register_rource2 != 0) ? register_file[register_rource2] : '0;	// returns 0 if accessing register 0
+endmodule
 
-// module extend (
-// 		input  logic [31:7] instr,
-// 		input  logic [ 1:0] immsrc,
-// 		output logic [31:0] immext
-// );
+module Extender (
+		input logic [1:0] immediate_source,
+		input logic [31:7] instruction,
+		output logic [31:0] immediate_extended
+);
 
-// 	always_comb begin
-// 		case (immsrc)
-// 			// B-type (branches)
-// 			2'b01: immext = {{20{instr[31]}}, instr[31:25], instr[11:7]};
+	logic [31:0] instr_full;
 
-// 			// J-type (jumps)
-// 			2'b11: immext = {{12{instr[31]}}, instr[19:12], instr[20], instr[30:21], 1'b0};
+	// Preenche os bits 6 a 0 com 0 para facilitar acesso com índices fixos
+   	assign instr_full = {instruction, 7'b0};
 
-// 			// Undefined cases
-// 			default: immext = 32'bx;
-// 		endcase
-// 	end
-// endmodule
+	assign immediate_extended =
+		(immediate_source == 2'b01) ? {{20{instr_full[31]}}, instr_full[31:25], instr_full[11:7]} :
+		(immediate_source == 2'b11) ? {{12{instr_full[31]}}, instr_full[19:12], instr_full[20], instr_full[30:21], 1'b0} :
+		'x;
+endmodule
 
-// module alu (
-// 		input  logic [31:0] a,
-// 		b,
-// 		input  logic [ 2:0] alucontrol,
-// 		output logic [31:0] result,
-// 		output logic        zero
-// );
+module ALU (
+		input logic [2:0] ALU_control,
+		input logic [31:0] A, B,
+		output logic zero,
+		output logic [31:0] result
+);
 
-// 	logic [31:0] condinvb, sum;
-// 	logic v;  // Overflow flag
-// 	logic isAddSub;  // True for add or subtract operations
+	logic of,		// Overflow flag
+	isAddorSub;		// True for add or subtract operations
+	logic [4:0] shift_amount;
+	logic [31:0] sum;
 
-// 	// Prepare conditional inversion of 'b' and calculate sum
-// 	assign condinvb = alucontrol[0] ? ~b : b;
-// 	assign sum = a + condinvb + alucontrol[0];
+	// prepare conditional inversion of 'B' and calculate sum
+	assign sum = A + (ALU_control[0] ? ~B : B) + ALU_control[0];
 
-// 	// Determine if the operation is addition or subtraction
-// 	assign isAddSub = ~alucontrol[2] & ~alucontrol[1] | ~alucontrol[1] & alucontrol[0];
+	// determine if the operation is addition or subtraction
+	assign isAddorSub = ~ALU_control[2] & ~ALU_control[1] | ~ALU_control[1] & ALU_control[0];
 
-// 	// ALU operation
-// 	always_comb begin
-// 		case (alucontrol)
-// 			3'b000:  result = sum;  // Add
-// 			3'b001:  result = sum;  // Subtract
-// 			3'b010:  result = a & b;  // AND
-// 			3'b011:  result = a | b;  // OR
-// 			3'b100:  result = a ^ b;  // XOR
-// 			3'b101:  result = sum[31] ^ v;  // SLT (set less than)
-// 			3'b110:  result = a << b[4:0];  // SLL (shift left logical)
-// 			3'b111:  result = a >> b[4:0];  // SRL (shift right logical)
-// 			default: result = 32'bx;  // Undefined operation
-// 		endcase
-// 	end
+	// zero flag: true if result is zero
+	assign zero = (result == 32'b0);
 
-// 	// Zero flag: true if result is zero
-// 	assign zero = (result == 32'b0);
+	// overflow detection
+	assign of = ~(ALU_control[0] ^ A[31] ^ B[31]) & (A[31] ^ sum[31]) & isAddorSub;
 
-// 	// Overflow detection
-// 	assign v = ~(alucontrol[0] ^ a[31] ^ b[31]) & (a[31] ^ sum[31]) & isAddSub;
-// endmodule
+	assign shift_amount = B[4:0];
+
+	// // operations
+	// always_comb begin
+	// 	case (ALU_control)
+	// 		3'b000:
+	// 			result = sum;		// Add
+	// 		3'b001:
+	// 			result = sum;		// Subtract
+	// 		3'b010:
+	// 			result = A & B;		// AND
+	// 		3'b011:	
+	// 			result = A | B;		// OR
+	// 		3'b100:
+	// 			result = A ^ B;		// XOR
+	// 		3'b101:
+	// 			result = sum[31] ^ of;		// SLT (set less than)
+	// 		3'b110:
+	// 			result = A << shift_amount;		// SLL (shift left logical)
+	// 		3'b111:
+	// 			result = A >> shift_amount;		// SRL (shift right logical)
+	// 		default:
+	// 			result = 'x;		// Undefined operation
+	// 	endcase
+	// end
+
+	// ¿ operations ?
+	assign result =
+		(ALU_control == 3'b000) ? sum :
+		(ALU_control == 3'b001) ? sum :
+		(ALU_control == 3'b010) ? A & B :
+		(ALU_control == 3'b011) ? A | B :
+		(ALU_control == 3'b100) ? A ^ B :
+		(ALU_control == 3'b101) ? sum[31] ^ of :
+		(ALU_control == 3'b110) ? A << B[4:0] :
+		(ALU_control == 3'b111) ? A >> B[4:0] :
+		'x;
+endmodule
