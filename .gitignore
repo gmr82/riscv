@@ -1,0 +1,8 @@
+# Ignore files without extensions
+*.
+
+# Ignore .vcd files
+*.vcd
+
+# Ignore all files inside the dump directory
+dump/*
