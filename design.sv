@@ -41,11 +41,11 @@ module TestBench ();
 		if (write_to_memory) begin
 			if (data_address === 100 & write_data === 25) begin
 					$display("Simulation succeeded!");
-					$stop;
+					// $stop;
 			end
 			else if (data_address !== 96) begin
 					$display("Simulation failed!");
-					$stop;
+					// $stop;
 			end
 		end
 	end
@@ -74,8 +74,8 @@ module Top (
 	);
 
 	InstructionMemory instMemory (
-		PC,
-		instruction
+		PC,		// address
+		instruction		// fetched instruction
 	);
 
 	DataMemory dataMemory (
@@ -187,7 +187,7 @@ module Controller (
 	logic branch;
 	logic [1:0] ALU_operation;
 
-	MainDecoder maindecoder (
+	MainDecoder mainDecoder (
 		opcode,
 		write_to_memory,
 		branch,
@@ -207,7 +207,7 @@ module Controller (
 		ALU_control
 	);
 
-	assign PC_source = branch & zero;
+	assign PC_source = (branch & zero) | jump;
 endmodule
 
 module MainDecoder (
@@ -225,14 +225,18 @@ module MainDecoder (
 
 	always_comb begin
 		case (opcode)
-			7'b0000011:
-				controls = 11'b1_00_1_0_01_0_00_0;	// lw
 			7'b0100011:
-				controls = 11'b0_01_1_1_00_0_00_0;	// sw
+				controls = 11'b0_01_1_1_XX_0_00_0;	// S-type
 			7'b0110011:
 				controls = 11'b1_xx_0_0_00_0_10_0;	// R-type
+			7'b0000011:
+				controls = 11'b1_00_1_0_01_0_00_0;	// I-type (lw)
+			7'b0010011:
+				controls = 11'b1_00_1_0_00_0_10_0;	// I-type
 			7'b1100011:
-				controls = 11'b0_10_0_0_00_1_01_0;	// beq
+				controls = 11'b0_10_0_0_00_1_01_0;	// B-type
+			7'b1101111:
+				controls = 11'b1_11_x_0_10_0_xx_1;	// J-type
 			default:
 				controls = 11'bx_xx_x_x_xx_x_xx_x;	// non-implemented instruction
 		endcase
@@ -333,7 +337,7 @@ module Datapath (
 
 	Extender extender (
 		immediate_source,
-		instruction[31:7],
+		instruction,
 		immediate_extended
 	);
 
@@ -396,7 +400,7 @@ endmodule
 module RegisterFile (
 		input logic clk,
 		input logic write_enabled,
-		input logic [4:0] register_rource1, register_rource2, destination_register, // rs1/rs2/rd
+		input logic [4:0] register_source1, register_source2, destination_register, // rs1/rs2/rd
 		input logic [31:0] data_to_write,
 		output logic [31:0] data_read1, data_read2
 );
@@ -411,25 +415,58 @@ module RegisterFile (
 		if (write_enabled) register_file[destination_register] <= data_to_write;
 	end
 
-	assign data_read1 = (register_rource1 != 0) ? register_file[register_rource1] : '0;	// returns 0 if accessing register 0
-	assign data_read2 = (register_rource2 != 0) ? register_file[register_rource2] : '0;	// returns 0 if accessing register 0
+	assign data_read1 = (register_source1 != 0) ? register_file[register_source1] : '0;	// returns 0 if accessing register 0
+	assign data_read2 = (register_source2 != 0) ? register_file[register_source2] : '0;	// returns 0 if accessing register 0
 endmodule
 
 module Extender (
 		input logic [1:0] immediate_source,
-		input logic [31:7] instruction,
+		input logic [31:0] instruction,
 		output logic [31:0] immediate_extended
 );
 
-	logic [31:0] instr_full;
-
-	// Preenche os bits 6 a 0 com 0 para facilitar acesso com índices fixos
-   	assign instr_full = {instruction, 7'b0};
-
 	assign immediate_extended =
-		(immediate_source == 2'b01) ? {{20{instr_full[31]}}, instr_full[31:25], instr_full[11:7]} :
-		(immediate_source == 2'b11) ? {{12{instr_full[31]}}, instr_full[19:12], instr_full[20], instr_full[30:21], 1'b0} :
-		'x;
+		(immediate_source == 2'b00) ? {{22{instruction[31]}}, instruction[30:20]} : // I-type
+		(immediate_source == 2'b10) ? {{20{instruction[31]}}, instruction[7], instruction[30:25], instruction[11:8], 1'b0} : // B-type
+		(immediate_source == 2'b01) ? {{21{instruction[31]}}, instruction[30:25], instruction[11:7]} : // S-type
+		(immediate_source == 2'b11) ? {{12{instruction[31]}}, instruction[19:12], instruction[20], instruction[30:21], 1'b0} :	// J-type
+		'x;	// R-type
+
+endmodule
+
+module Extender2 (
+		input logic [1:0] immediate_source,
+		input logic [31:0] instruction,
+		output logic [31:0] immediate_extended
+);
+	always_comb begin
+		case (immediate_source)
+			// 2'b00:		// I-type
+			// 	immediate_extended = {{22{instruction[31]}}, instruction[30:20]};
+			// 2'b01:		// B-type
+			// 	immediate_extended = {
+			// 	{20{instruction[31]}},
+			// 	instruction[7],
+			// 	instruction[30:25],
+			// 	instruction[11:8],
+			// 	1'b0
+			// 	};
+
+			// 2'b10:		// S-type
+			// 	immediate_extended = {{21{instruction[31]}}, instruction[30:25], instruction[11:7]};
+
+			// 2'b11:		// J-type
+			// 	immediate_extended = {
+			// 	{12{instruction[31]}},
+			// 	instruction[19:12],
+			// 	instruction[20],
+			// 	instruction[30:21],
+			// 	1'b0
+			// 	};
+			default:
+				immediate_extended = 'x;
+		endcase
+	end
 endmodule
 
 module ALU (
