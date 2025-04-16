@@ -22,18 +22,8 @@ module TestBench ();
 
 	// generates clock
 	initial begin
-	        clk <= 0;
+	        clk <= 1;
 	        forever #5 clk = ~clk;		// 5ns high + 5ns low = 10ns → 100MHz
-	end
-
-	initial begin
-		$dumpfile("waveform.vcd");		// indicates file.vcd (Value Change Dump)
-		$dumpvars(0, dut);				// dump signals from the module
-
-		#500;
-		// $dumpon;
-		// $dumpoff;
-		$finish;
 	end
 
 	// checks results
@@ -48,6 +38,16 @@ module TestBench ();
 					// $stop;
 			end
 		end
+	end
+
+	initial begin
+		$dumpfile("waveform.vcd");		// indicates file.vcd (Value Change Dump)
+		$dumpvars(0, dut);		// dump signals from the module
+
+		#500;
+		// $dumpon;
+		// $dumpoff;
+		$finish;
 	end
 endmodule
 
@@ -144,7 +144,7 @@ module InstructionMemory (
 	assign instruction_read = RAM[address[31:2]];		// word-aligned access (bit slicing)
 
 	final begin
-		$writememh("./dump/instructionMemory.hex", RAM);		// dump memory contents to a file at the end of simulation
+		$writememh("./dump/instructionMemory.hex", RAM);		// dumps memory contents to a file at the end of simulation
 	end
 endmodule
 
@@ -165,7 +165,7 @@ module DataMemory (
 			RAM[address[31:2]] <= data_to_write;		// word-aligned write
 
 	final begin
-		$writememh("./dump/dataMemory.hex", RAM);		// dump memory contents to a file at the end of simulation
+		$writememh("./dump/dataMemory.hex", RAM);		// dumps memory contents to a file at the end of simulation
 	end
 endmodule
 
