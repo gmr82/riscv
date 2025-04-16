@@ -1,16 +1,16 @@
 `timescale 1ns / 1ns    // `timescale 1ns/1ps
 
 module TestBench ();
-	logic clk, reset, MemWrite;
-	logic [31:0] WriteData, DataAdr;
+	logic clk, reset, write_to_memory;
+	logic [31:0] write_data, data_address;
 
 	// instantiates device under test (top level module)
 	Top dut (
 		clk,
 		reset,
-		MemWrite,
-		WriteData,
-		DataAdr
+		write_to_memory,
+		write_data,
+		data_address
 	);
 	
 	// initializes test
@@ -28,11 +28,11 @@ module TestBench ();
 
 	// checks results
 	always @(negedge clk) begin
-		if (MemWrite) begin
-			if (DataAdr === 100 & WriteData === 25) begin
+		if (write_to_memory) begin
+			if (data_address === 100 & write_data === 25) begin
 				$display("Simulation succeeded");
 				// $stop;
-			end else if (DataAdr !== 96) begin
+			end else if (data_address !== 96) begin
 				$display("Simulation failed");
 				// $stop;
 			end
@@ -53,8 +53,9 @@ endmodule
 // top level module
 module Top (
 		input logic clk, reset,
-		output logic MemWriteM,
-		output logic [31:0] WriteDataM, DataAdrM
+		output logic write_to_memoryM,
+		output logic [31:0] write_dataM,
+		data_addressM
 );
 
 	logic [31:0] PCF, InstrF, ReadDataM;
@@ -65,10 +66,10 @@ module Top (
 		reset,
 		InstrF,
 		ReadDataM,
-		MemWriteM,
+		write_to_memoryM,
 		PCF,
-		DataAdrM, 
-		WriteDataM
+		data_addressM, 
+		write_dataM
 	);
 
 	InstructionMemory instMemory (
@@ -77,9 +78,9 @@ module Top (
 	);
 	DataMemory dataMemory (
 		clk,
-		MemWriteM,
-		DataAdrM,
-		WriteDataM,
+		write_to_memoryM,
+		data_addressM,
+		write_dataM,
 		ReadDataM
 	);
 endmodule
